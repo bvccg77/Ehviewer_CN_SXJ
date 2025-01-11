@@ -1351,24 +1351,24 @@ public class Settings {
     }
 
 
-    public static final String KEY_LOCK_COOKIE_IGNEOUS = "lock_cookie_igneous";
-
-    private static boolean IS_LOCK_COOKIE_IGNEOUS = false;
-
-    public static boolean getLockCookieIgneous() {
-        return getBoolean(KEY_LOCK_COOKIE_IGNEOUS, IS_LOCK_COOKIE_IGNEOUS) ;
-    }
-
-    public static void setLockCookieIgneous(boolean value) {
-        putBoolean(KEY_LOCK_COOKIE_IGNEOUS, value);
-    }
+//    public static final String KEY_LOCK_COOKIE_IGNEOUS = "lock_cookie_igneous";
+//
+//    private static boolean IS_LOCK_COOKIE_IGNEOUS = false;
+//
+//    public static boolean getLockCookieIgneous() {
+//        return getBoolean(KEY_LOCK_COOKIE_IGNEOUS, IS_LOCK_COOKIE_IGNEOUS) ;
+//    }
+//
+//    public static void setLockCookieIgneous(boolean value) {
+//        putBoolean(KEY_LOCK_COOKIE_IGNEOUS, value);
+//    }
 
     public static final String USER_BACKGROUND_IMAGE = "background_image_path";
     public static final String USER_AVATAR_IMAGE = "avatar_image_path";
 
     public static File getUserImageFile(String key){
         String path = getString(key,"");
-        if (path.equals("")){
+        if (path.isEmpty()){
             return null;
         }
         File file = new File(path);
@@ -1385,10 +1385,8 @@ public class Settings {
 
     public static final String KEY_DOWNLOAD_ORDER_ASC = "download_order_asc";
 
-    private static boolean IS_DOWNLOAD_ORDER_ASC = true;
-
     public static boolean getDownloadOrder() {
-        return getBoolean(KEY_DOWNLOAD_ORDER_ASC, IS_DOWNLOAD_ORDER_ASC) ;
+        return getBoolean(KEY_DOWNLOAD_ORDER_ASC, true) ;
     }
 
     public static void setDownloadOrder(boolean value) {
