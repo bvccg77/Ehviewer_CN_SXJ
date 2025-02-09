@@ -1,20 +1,3 @@
-/*
- * Copyright 2022 Tarsin Norbin
- *
- * This file is part of EhViewer
- *
- * EhViewer is free software: you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * EhViewer is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with EhViewer.
- * If not, see <https://www.gnu.org/licenses/>.
- */
 package com.hippo.lib.image
 
 import android.content.res.Resources
@@ -38,7 +21,12 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.hippo.ehviewer.EhApplication
 import java.io.FileInputStream
 import java.nio.channels.FileChannel
+import kotlin.math.max
 import kotlin.math.min
+import androidx.core.graphics.createBitmap
+import com.hippo.Native
+import okio.BufferedSource
+import java.nio.ByteBuffer
 
 class Image private constructor(
     source: FileInputStream?,
@@ -46,15 +34,16 @@ class Image private constructor(
     val hardware: Boolean = false,
     val release: () -> Unit? = {}
 ) {
-    internal var mObtainedDrawable: Drawable?
+    private var mObtainedDrawable: Drawable?
     private var mBitmap: Bitmap? = null
+    private var mReferences = 0
 
     init {
         mObtainedDrawable = null
         source?.let {
             var simpleSize: Int? = null
-            if (source.available() > 8388608) {
-                simpleSize = source.available() / 8388608
+            if (source.available() > 10485760) {
+                simpleSize = source.available() / 10485760 + 1
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val src = ImageDecoder.createSource(
@@ -70,13 +59,12 @@ class Image private constructor(
                                 if (hardware) ALLOCATOR_DEFAULT else ALLOCATOR_SOFTWARE
                             // Sadly we must use software memory since we need copy it to tile buffer, fuck glgallery
                             // Idk it will cause how much performance regression
-
+                            val screenSize = min(
+                                info.size.width / screenWidth,
+                                info.size.height / screenHeight
+                            ).coerceAtLeast(1)
                             decoder.setTargetSampleSize(
-                                simpleSize
-                                    ?: min(
-                                        info.size.width / (2 * screenWidth),
-                                        info.size.height / (2 * screenHeight)
-                                    ).coerceAtLeast(1)
+                                max(screenSize, simpleSize ?: 1)
                             )
                             // Don't
                         }
@@ -114,7 +102,7 @@ class Image private constructor(
         ?: mObtainedDrawable!!.intrinsicHeight
     val isRecycled = mObtainedDrawable == null
 
-    var started = false
+    private var started = false
 
     @Synchronized
     fun recycle() {
@@ -136,7 +124,7 @@ class Image private constructor(
 
     private fun prepareBitmap() {
         if (mBitmap != null) return
-        mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        mBitmap = createBitmap(width, height)
     }
 
     private fun updateBitmap() {
@@ -144,45 +132,64 @@ class Image private constructor(
         mObtainedDrawable!!.draw(Canvas(mBitmap!!))
     }
 
-//    fun render(
-//        srcX: Int, srcY: Int, dst: Bitmap, dstX: Int, dstY: Int,
-//        width: Int, height: Int
-//    ) {
-//        check(!hardware) { "Hardware buffer cannot be used in glgallery" }
-//        val bitmap: Bitmap = if (animated) {
-//            updateBitmap()
-//            mBitmap!!
-//        } else {
-//            (mObtainedDrawable as BitmapDrawable).bitmap
-//        }
-//        nativeRender(
-//            bitmap,
-//            srcX,
-//            srcY,
-//            dst,
-//            dstX,
-//            dstY,
-//            width,
-//            height
-//        )
-//    }
+    @Synchronized
+    fun obtain(): Boolean {
+        return if (isRecycled) {
+            false
+        } else {
+            ++mReferences
+            true
+        }
+    }
+
+    @Synchronized
+    fun release() {
+        --mReferences
+        if (mReferences <= 0 && isRecycled) {
+            recycle()
+        }
+    }
+
+    fun getDrawable(): Drawable {
+        check(obtain()) { "Recycled!" }
+        return mObtainedDrawable as Drawable
+    }
 
     fun texImage(init: Boolean, offsetX: Int, offsetY: Int, width: Int, height: Int) {
         check(!hardware) { "Hardware buffer cannot be used in glgallery" }
-        val bitmap: Bitmap = if (animated) {
-            updateBitmap()
-            mBitmap!!
-        } else {
-            (mObtainedDrawable as BitmapDrawable).bitmap
+        try {
+            val bitmap: Bitmap = if (animated) {
+                updateBitmap()
+                mBitmap!!
+            } else {
+                if (mObtainedDrawable == null) {
+                    return
+                }
+                if (mObtainedDrawable is BitmapDrawable) {
+                    (mObtainedDrawable as BitmapDrawable).bitmap
+                } else {
+                    val stickerBitmap = createBitmap(
+                        mObtainedDrawable!!.intrinsicWidth,
+                        mObtainedDrawable!!.intrinsicHeight
+                    )
+                    val canvas = Canvas(stickerBitmap)
+                    mObtainedDrawable!!.setBounds(0, 0, stickerBitmap.width, stickerBitmap.height)
+                    mObtainedDrawable!!.draw(canvas)
+                    stickerBitmap
+                }
+            }
+            nativeTexImage(
+                bitmap,
+                init,
+                offsetX,
+                offsetY,
+                width,
+                height
+            )
+        } catch (e: ClassCastException) {
+            FirebaseCrashlytics.getInstance().recordException(e)
+            return
         }
-        nativeTexImage(
-            bitmap,
-            init,
-            offsetX,
-            offsetY,
-            width,
-            height
-        )
     }
 
     fun start() {
@@ -196,10 +203,11 @@ class Image private constructor(
     val delay: Int
         get() {
             if (animated)
-                return 50
+                return 10
             return 0
         }
 
+    @get:SuppressWarnings("deprecation")
     val isOpaque: Boolean
         get() {
             return mObtainedDrawable?.opacity == PixelFormat.OPAQUE

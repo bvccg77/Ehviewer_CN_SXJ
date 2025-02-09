@@ -89,6 +89,8 @@ import com.hippo.ehviewer.ui.scene.SignInScene;
 import com.hippo.ehviewer.ui.scene.SolidScene;
 import com.hippo.ehviewer.ui.scene.WarningScene;
 import com.hippo.ehviewer.ui.scene.WebViewSignInScene;
+import com.hippo.ehviewer.ui.splash.SplashActivity;
+import com.hippo.ehviewer.updater.AppUpdater;
 import com.hippo.ehviewer.widget.EhDrawerLayout;
 import com.hippo.ehviewer.widget.LimitsCountView;
 import com.hippo.io.UniFileInputStreamPipe;
@@ -370,6 +372,13 @@ public final class MainActivity extends StageActivity
 
     @Override
     protected void onCreate2(@Nullable Bundle savedInstanceState) {
+        Intent intent = getIntent();
+        if (intent != null) {
+            boolean res = intent.getBooleanExtra(SplashActivity.KEY_RESTART,false);
+            if (res){
+                savedInstanceState = null;
+            }
+        }
         setContentView(R.layout.activity_main);
 
         mDrawerLayout = (EhDrawerLayout) ViewUtils.$$(this, R.id.draw_view);
@@ -425,8 +434,15 @@ public final class MainActivity extends StageActivity
         } else {
             onRestore(savedInstanceState);
         }
-
         EhTagDatabase.update(this);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (!Settings.getCloseAutoUpdate()){
+            AppUpdater.update(this,false);
+        }
     }
 
     private void initUserImage() {

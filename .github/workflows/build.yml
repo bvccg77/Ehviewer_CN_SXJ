@@ -19,12 +19,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 11
+          java-version: 21
 
       - name: Build
         run: |
           chmod +x ./gradlew
-          ./gradlew clean app:assembleDebug
+          ./gradlew licenseAppCenterDebugReport
+          ./gradlew app:assembleDebug
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
